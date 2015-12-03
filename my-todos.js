@@ -45,15 +45,23 @@ if (Meteor.isClient) {
 			event.preventDefault();
 			var todoName = $('[name="todoName"]').val();
 			var currentList = this._id;
-			var currentUser = Meteor.userId();
+			/*var currentUser = Meteor.userId();
+			console.log("currentUser: " + currentUser);
 			Todos.insert({
 				name: todoName,
 				complete: false,
 				createdAt: new Date(),
 				createdBy: currentUser,
 				listId: currentList
-			});
-			$('[name="todoName"]').val('');
+			});*/
+			Meteor.call('createListItem', currentList, todoName, function(error, results) {
+				if (error) {
+					console.log(error.reason);
+				} else {
+					//console.log("results: " + results);
+					$('[name="todoName"]').val('');
+				}
+			})
 		}
 	});
 	
@@ -64,7 +72,8 @@ if (Meteor.isClient) {
 			var documentId = this._id;
 			var confirm = window.confirm("Delete this task?");
 			if (confirm) {
-				Todos.remove({_id: documentId});
+				//Todos.remove({_id: documentId});
+				Meteor.call('removeListItem', documentId);
 			}
 		},
 		'keyup [name=todoItem]': function(event) {
@@ -73,13 +82,15 @@ if (Meteor.isClient) {
 			} else {
 				var documentId = this._id;
 				var todoItem = $(event.target).val();
-				Todos.update({_id:documentId}, {$set: {name:todoItem}});
+				Meteor.call('updateListItem', documentId, todoItem);
+				//Todos.update({_id:documentId}, {$set: {name:todoItem}});
 			}
 		},
 		'change [type=checkbox]': function(event) {
 			var documentId = this._id;
 			var isCompleted = this.completed;
-			Todos.update({_id:documentId}, {$set: {completed: !isCompleted}});
+			Meteor.call('changeItemStatus', documentId, !isCompleted);
+			//Todos.update({_id:documentId}, {$set: {completed: !isCompleted}});
 		}
 	});
 	Template.todoItem.helpers({
@@ -243,6 +254,95 @@ if (Meteor.isServer) {
 				createdBy: currentUser
 			};
 			return Lists.insert(data);
+		},
+		'createListItem': function(listName, item) {
+			var currentUser = Meteor.userId();
+			if (!currentUser) {
+				throw new Meteor.Error("not-logged-in", "You're not logged in.");
+			}
+			check(listName, String);
+			if (listName == "") {
+				throw new Meteor.Error("empty-list-name", "You didn't provide a list name.");
+			}
+			check(item, String);
+			if (item == "") {
+				throw new Meteor.Error("empty-item-name", "You didn't provide an item name.");
+			}
+			var currentList = Lists.findOne(listName);
+			if (!currentList) {
+				throw new Meteor.Error("invalid-list", "List does not exist.");
+			}
+			if (currentList.createdBy != currentUser) {
+				throw new Meteor.Error("invalid-user", "You don't own that list.");
+			}
+			var data = {
+				name: item,
+				complete: false,
+				createdAt: new Date(),
+				createdBy: currentUser,
+				listId: listName
+			};
+			//console.log("data: " + data.name + ", " + data.complete + ", " + data.createdAt + ", " + data.createdBy + ", " + data.listId);
+			return Todos.insert(data);
+		},
+		'updateListItem': function(documentId, itemName) {
+			var currentUser = Meteor.userId();
+			if (!currentUser) {
+				throw new Meteor.Error("not-logged-in", "You're not logged in.");
+			}
+			check(documentId, String);
+			if (documentId == "") {
+				throw new Meteor.Error("empty-item-id", "You didn't provide a list name.");
+			}
+			check(itemName, String);
+			if (itemName == "") {
+				throw new Meteor.Error("empty-item-name", "You didn't provide an item name.");
+			}
+			var currentItem = Todos.findOne(documentId);
+			if (!currentItem) {
+				throw new Meteor.Error("invalid-todo", "Todo item does not exist.");
+			}
+			if (currentItem.createdBy != currentUser) {
+				throw new Meteor.Error("invalid-user", "You don't own that todo item.");
+			}
+			return Todos.update({_id:documentId}, {$set: {name:itemName}});
+		},
+		'changeItemStatus': function(documentId, isCompleted) {
+			var currentUser = Meteor.userId();
+			if (!currentUser) {
+				throw new Meteor.Error("not-logged-in", "You're not logged in.");
+			}
+			check(documentId, String);
+			if (documentId == "") {
+				throw new Meteor.Error("empty-item-id", "You didn't provide a list name.");
+			}
+			check(isCompleted, Boolean);
+			var currentItem = Todos.findOne(documentId);
+			if (!currentItem) {
+				throw new Meteor.Error("invalid-todo", "Todo item does not exist.");
+			}
+			if (currentItem.createdBy != currentUser) {
+				throw new Meteor.Error("invalid-user", "You don't own that todo item.");
+			}
+			return Todos.update({_id:documentId}, {$set: {completed: isCompleted}});
+		},
+		'removeListItem': function(documentId) {
+			var currentUser = Meteor.userId();
+			if (!currentUser) {
+				throw new Meteor.Error("not-logged-in", "You're not logged in.");
+			}
+			check(documentId, String);
+			if (documentId == "") {
+				throw new Meteor.Error("empty-item-id", "You didn't provide a list name.");
+			}
+			var currentItem = Todos.findOne(documentId);
+			if (!currentItem) {
+				throw new Meteor.Error("invalid-todo", "Todo item does not exist.");
+			}
+			if (currentItem.createdBy != currentUser) {
+				throw new Meteor.Error("invalid-user", "You don't own that todo item.");
+			}
+			return Todos.remove({_id: documentId});
 		}
 	});
 }
